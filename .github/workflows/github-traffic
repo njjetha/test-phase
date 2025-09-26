@@ -1,0 +1,46 @@
+name: fetch-traffic-stats
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  repos-details:
+    name: get-list-public-repos
+    runs-on: ubuntu-latest
+    outputs:
+      quic-repos: ${{ steps.step1.outputs.quic-repos }}
+      qualcomm-repos: ${{ steps.step1.outputs.qualcomm-repos }}
+      audioreach-repos: ${{ steps.step1.outputs.audioreach-repos }}
+      qualcomm-AI-research-repos: ${{ steps.step1.outputs.qualcomm-AI-research-repos }}
+      qualcomm-linux-repos: ${{ steps.step1.outputs.qualcomm-linux-repos }}
+      qualcomm-qrb-ros-repos: ${{ steps.step1.outputs.qualcomm-qrb-ros-repos }}
+      SnapdragonStudios-repos: ${{ steps.step1.outputs.SnapdragonStudios-repos }}
+    steps:
+      - name: run-shell-script
+        id: step1
+        run: |
+          per_page=30
+          orgs=("quic" "audioreach" "qualcomm" "qualcomm-AI-research" "qualcomm-linux" "qualcomm-qrb-ros" "SnapdragonStudios")
+          declare -A full_names
+          for org in "${orgs[@]}"; do
+            page=1
+            while true; do
+              url="https://api.github.com/orgs/$org/repos?type=public&per_page=$per_page&page=$page"
+              response=$(curl -L -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{ secrets.ghrs_github_api_token }}" \
+              -H "X-GitHub-Api-Version: 2022-11-28" -s $url)
+              repo_names=$(echo "$response" | jq -r '.[].full_name')
+              if [[ -z "$repo_names" ]]; then
+                break
+              fi
+              full_names[$org]+="$repo_names"$'\n'
+              page=$((page+1))
+            done
+          done
+          for org in "${orgs[@]}"; do
+            full_names_json=$(echo "${full_names[$org]}" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+            echo $full_names_json
+            echo "$org-repos=$full_names_json" >> $GITHUB_OUTPUT
+          done
+ 
